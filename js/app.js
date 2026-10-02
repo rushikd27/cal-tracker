@@ -4,10 +4,13 @@
   const MEALS = [
     { id: "breakfast", label: "Breakfast" },
     { id: "lunch", label: "Lunch" },
-    { id: "snacks", label: "Snacks" },
     { id: "dinner", label: "Dinner" },
+    { id: "misc", label: "Misc" },
   ];
-  const KEYS = { log: "ct.log", custom: "ct.custom", settings: "ct.settings", recent: "ct.recent" };
+  const KEYS = {
+    log: "ct.log", custom: "ct.custom", settings: "ct.settings", recent: "ct.recent",
+    exercise: "ct.exercise", profile: "ct.profile", weights: "ct.weights",
+  };
   const DEFAULT_SETTINGS = { cal: 2000, p: 75, c: 250, f: 65 };
 
   // ---------- Storage ----------
@@ -32,11 +35,21 @@
     custom: load(KEYS.custom, []),
     settings: { ...DEFAULT_SETTINGS, ...load(KEYS.settings, {}) },
     recent: load(KEYS.recent, []),
+    exercise: load(KEYS.exercise, {}),
+    profile: load(KEYS.profile, null),
+    weights: load(KEYS.weights, {}),
     date: todayStr(),
     meal: null,
     selected: null,
     category: "All",
   };
+
+  // Older versions had a "Snacks" meal; it is now "Misc".
+  let migrated = false;
+  for (const list of Object.values(state.log)) {
+    for (const e of list) if (e.meal === "snacks") { e.meal = "misc"; migrated = true; }
+  }
+  if (migrated) save(KEYS.log, state.log);
 
   // ---------- Helpers ----------
   function todayStr() {
@@ -64,6 +77,12 @@
   }
   function entriesFor(date) {
     return state.log[date] || [];
+  }
+  function exerciseFor(date) {
+    return state.exercise[date] || [];
+  }
+  function burnedOn(date) {
+    return exerciseFor(date).reduce((s, x) => s + x.kcal, 0);
   }
   function totals(entries) {
     return entries.reduce(
@@ -104,18 +123,21 @@
     const entries = entriesFor(state.date);
     const t = totals(entries);
     const g = state.settings;
+    const burned = burnedOn(state.date);
+    const budget = g.cal + burned;
 
     // Ring
     const circ = 2 * Math.PI * 52;
-    const pct = g.cal > 0 ? Math.min(t.cal / g.cal, 1) : 0;
+    const pct = budget > 0 ? Math.min(t.cal / budget, 1) : 0;
     const ring = $("#ring-fg");
     ring.style.strokeDasharray = circ;
     ring.style.strokeDashoffset = circ * (1 - pct);
-    ring.classList.toggle("over", t.cal > g.cal);
+    ring.classList.toggle("over", t.cal > budget);
     $("#cal-eaten").textContent = r0(t.cal);
-    $("#cal-goal").textContent = g.cal;
+    $("#cal-goal").textContent = r0(budget);
+    $("#budget").textContent = `Goal ${g.cal} + exercise ${r0(burned)} − food ${r0(t.cal)}`;
 
-    const left = g.cal - t.cal;
+    const left = budget - t.cal;
     $("#cal-remaining").textContent = Math.abs(r0(left));
     $("#remaining-label").textContent = left >= 0 ? "kcal left" : "kcal over";
     $(".remaining").classList.toggle("over", left < 0);
@@ -152,7 +174,80 @@
           ${items}
         </div>`;
     }).join("");
+
+    // Exercise
+    const ex = exerciseFor(state.date);
+    $("#ex-total").textContent = r0(burned) + " kcal";
+    $("#ex-list").innerHTML = ex.length
+      ? `<ul class="entries">${ex.map((x, i) => `
+          <li class="entry">
+            <div class="entry-main">
+              <div class="entry-name">${esc(x.name)}</div>
+              <div class="entry-sub">${x.mins} min</div>
+            </div>
+            <span class="entry-cal burn">−${r0(x.kcal)}</span>
+            <button class="del-btn" data-del-ex="${i}" aria-label="Remove ${esc(x.name)}">×</button>
+          </li>`).join("")}</ul>`
+      : `<div class="empty">No exercise logged. Calories you burn are added to today's allowance.</div>`;
   }
+
+  $("#ex-list").addEventListener("click", (ev) => {
+    const del = ev.target.closest("[data-del-ex]");
+    if (!del) return;
+    const list = exerciseFor(state.date).slice();
+    list.splice(Number(del.dataset.delEx), 1);
+    if (list.length) state.exercise[state.date] = list;
+    else delete state.exercise[state.date];
+    save(KEYS.exercise, state.exercise);
+    renderToday();
+  });
+
+  // ---------- Exercise dialog ----------
+  const exDialog = $("#ex-dialog");
+  const exForm = $("#ex-form");
+  $("#ex-activity").innerHTML =
+    EXERCISES.map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join("") +
+    `<option value="other">Other (enter calories yourself)</option>`;
+
+  function bodyWeight() {
+    return state.profile?.weight || null;
+  }
+  function updateExEstimate() {
+    const v = exForm.activity.value;
+    const other = v === "other";
+    $("#ex-name-wrap").hidden = !other;
+    exForm.name.required = other;
+    const w = bodyWeight();
+    if (other) {
+      $("#ex-hint").textContent = "Enter the calories from your watch or app.";
+      return;
+    }
+    const mins = Number(exForm.mins.value) || 0;
+    exForm.kcal.value = Math.round(EXERCISES[v].met * (w || 70) * (mins / 60)) || "";
+    $("#ex-hint").textContent = w
+      ? `Estimated for your weight (${w} kg). You can edit the number.`
+      : "Estimated for 70 kg. Save your weight in Settings → My profile for a better estimate.";
+  }
+  exForm.activity.addEventListener("change", updateExEstimate);
+  exForm.mins.addEventListener("input", updateExEstimate);
+
+  $("#add-ex-btn").addEventListener("click", () => {
+    exForm.reset();
+    updateExEstimate();
+    exDialog.showModal();
+  });
+  $("#ex-close").addEventListener("click", () => exDialog.close());
+  exDialog.addEventListener("click", (ev) => { if (ev.target === exDialog) exDialog.close(); });
+  exForm.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const v = exForm.activity.value;
+    const name = v === "other" ? exForm.name.value.trim() : EXERCISES[v].name;
+    const entry = { name, mins: Number(exForm.mins.value), kcal: Number(exForm.kcal.value), t: Date.now() };
+    (state.exercise[state.date] ||= []).push(entry);
+    save(KEYS.exercise, state.exercise);
+    exDialog.close();
+    renderToday();
+  });
 
   $("#meals").addEventListener("click", (ev) => {
     const add = ev.target.closest("[data-add]");
@@ -340,25 +435,25 @@
     const days = [];
     for (let i = 13; i >= 0; i--) {
       const d = shiftDate(todayStr(), -i);
-      days.push({ d, t: totals(entriesFor(d)), n: entriesFor(d).length });
+      days.push({ d, t: totals(entriesFor(d)), n: entriesFor(d).length, burned: burnedOn(d) });
     }
     const max = Math.max(g * 1.2, ...days.map((x) => x.t.cal), 1);
     const chart = $("#chart");
     chart.innerHTML =
-      days.map(({ d, t, n }) => {
+      days.map(({ d, t, n, burned }) => {
         const h = n ? (t.cal / max) * 100 : 2;
-        const cls = !n ? "none" : t.cal > g ? "over" : "";
+        const cls = !n ? "none" : t.cal > g + burned ? "over" : "";
         const label = d.slice(8);
-        return `<div class="col" title="${d}: ${r0(t.cal)} kcal">
+        return `<div class="col" title="${d}: ${r0(t.cal)} kcal eaten, ${r0(burned)} kcal exercise">
           <div class="b ${cls}" style="height:${h}%"></div>
           <span class="lbl">${label}</span>
         </div>`;
       }).join("") + `<div class="goal-line" style="bottom:${(g / max) * 100}%"></div>`;
 
     const logged = Object.keys(state.log).filter((d) => state.log[d].length);
-    const avg = { cal: 0, p: 0, c: 0, f: 0 };
+    const avg = { cal: 0, p: 0, c: 0, f: 0, burned: 0 };
     logged.forEach((d) => {
-      const t = totals(state.log[d]);
+      const t = { ...totals(state.log[d]), burned: burnedOn(d) };
       for (const k in avg) avg[k] += t[k] / logged.length;
     });
     $("#averages").innerHTML = logged.length
@@ -366,14 +461,70 @@
          <div><b>${r0(avg.p)} g</b>protein</div>
          <div><b>${r0(avg.c)} g</b>carbs</div>
          <div><b>${r0(avg.f)} g</b>fat</div>
+         <div><b>${r0(avg.burned)}</b>kcal exercise / day</div>
          <div><b>${logged.length}</b>days logged</div>`
       : `<p class="muted">No entries yet.</p>`;
+
+    renderWeights();
   }
+
+  // ---------- Weight log ----------
+  function recordWeight(date, kg) {
+    state.weights[date] = kg;
+    save(KEYS.weights, state.weights);
+  }
+  function renderWeights() {
+    const dates = Object.keys(state.weights).sort().reverse();
+    const p = state.profile;
+    const h = p?.height;
+    $("#weight-list").innerHTML = dates.length
+      ? `<ul class="entries">${dates.slice(0, 30).map((d, i) => {
+          const w = state.weights[d];
+          const prev = state.weights[dates[i + 1]];
+          const diff = prev != null ? r1(w - prev) : null;
+          const diffTxt = diff ? ` <span class="muted small">(${diff > 0 ? "+" : ""}${diff})</span>` : "";
+          const bmi = h ? ` · BMI ${r1(w / (h / 100) ** 2)}` : "";
+          return `<li class="entry">
+            <div class="entry-main"><div class="entry-name">${w} kg${diffTxt}</div><div class="entry-sub">${d}${bmi}</div></div>
+            <button class="del-btn" data-del-w="${d}" aria-label="Remove weight for ${d}">×</button>
+          </li>`;
+        }).join("")}</ul>${p?.target ? `<p class="muted small">Target: ${p.target} kg (${r1(Math.abs(state.weights[dates[0]] - p.target))} kg to go)</p>` : ""}`
+      : `<p class="muted small">No weights logged yet.</p>`;
+  }
+  $("#weight-form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const kg = r1(Number(ev.target.weight.value));
+    recordWeight(todayStr(), kg);
+    if (state.profile) {
+      state.profile.weight = kg;
+      save(KEYS.profile, state.profile);
+    }
+    ev.target.reset();
+    renderWeights();
+  });
+  $("#weight-list").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-del-w]");
+    if (!b) return;
+    delete state.weights[b.dataset.delW];
+    save(KEYS.weights, state.weights);
+    renderWeights();
+  });
 
   // ---------- Settings ----------
   const goalsForm = $("#goals-form");
+  const profileForm = $("#profile-form");
   function renderSettings() {
     for (const k of ["cal", "p", "c", "f"]) goalsForm[k].value = state.settings[k];
+    const pr = state.profile;
+    if (pr) {
+      for (const k of ["name", "sex", "age", "height", "weight", "target", "activity", "goal"]) {
+        if (pr[k] != null) profileForm[k].value = pr[k];
+      }
+      showProfileResult();
+    } else {
+      profileForm.activity.value = "1.2";
+      profileForm.goal.value = "0";
+    }
     const list = $("#custom-list");
     list.innerHTML = state.custom.length
       ? state.custom.map((f, i) => `
@@ -404,35 +555,74 @@
     setTimeout(() => (btn.textContent = "Save goals"), 1500);
   });
 
-  $("#tdee-form").addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const fd = new FormData(ev.target);
-    const w = +fd.get("weight"), h = +fd.get("height"), a = +fd.get("age");
-    const bmr = 10 * w + 6.25 * h - 5 * a + (fd.get("sex") === "m" ? 5 : -161);
-    const tdee = bmr * +fd.get("activity");
-    const target = Math.max(1200, Math.round((tdee + +fd.get("goal")) / 10) * 10);
+  function suggestGoals(pr) {
+    const bmr = 10 * pr.weight + 6.25 * pr.height - 5 * pr.age + (pr.sex === "m" ? 5 : -161);
+    const tdee = bmr * pr.activity;
+    const cal = Math.max(1200, Math.round((tdee + pr.goal) / 10) * 10);
     // Protein ~1.6 g/kg (good for most people training or dieting), fat ~25% kcal, rest carbs.
-    const p = Math.round(w * 1.6);
-    const f = Math.round((target * 0.25) / 9);
-    const c = Math.max(0, Math.round((target - p * 4 - f * 9) / 4));
-    const out = $("#tdee-result");
+    const p = Math.round(pr.weight * 1.6);
+    const f = Math.round((cal * 0.25) / 9);
+    const c = Math.max(0, Math.round((cal - p * 4 - f * 9) / 4));
+    return { bmr, tdee, goals: { cal, p, c, f } };
+  }
+  function bmiLabel(bmi) {
+    // WHO Asian cut-offs, which suit Indian body composition better than the global ones.
+    if (bmi < 18.5) return "underweight";
+    if (bmi < 23) return "healthy";
+    if (bmi < 25) return "overweight";
+    return "obese";
+  }
+
+  function showProfileResult() {
+    const pr = state.profile;
+    const { bmr, tdee, goals } = suggestGoals(pr);
+    const bmi = pr.weight / (pr.height / 100) ** 2;
+    const out = $("#profile-result");
     out.hidden = false;
     out.innerHTML = `
-      <p>BMR ≈ <b>${r0(bmr)}</b> kcal · Maintenance ≈ <b>${r0(tdee)}</b> kcal</p>
-      <p>Suggested target: <b>${target} kcal</b> · P ${p} g · C ${c} g · F ${f} g</p>
-      <button class="btn primary" id="apply-tdee">Use these goals</button>`;
-    $("#apply-tdee").addEventListener("click", () => {
-      state.settings = { cal: target, p, c, f };
+      <p>BMI <b>${r1(bmi)}</b> (${bmiLabel(bmi)}, Asian cut-offs) · BMR ≈ <b>${r0(bmr)}</b> kcal · Maintenance ≈ <b>${r0(tdee)}</b> kcal</p>
+      <p>Suggested daily goal: <b>${goals.cal} kcal</b> · P ${goals.p} g · C ${goals.c} g · F ${goals.f} g</p>
+      <p class="muted small">Workouts aren't included here. Log them under Exercise on the Today tab and they're added to that day's allowance.</p>
+      <button type="button" class="btn primary" id="apply-goals">Use these goals</button>`;
+    $("#apply-goals").addEventListener("click", () => {
+      state.settings = goals;
       save(KEYS.settings, state.settings);
       renderSettings();
       renderToday();
-      out.innerHTML = "<p>Goals updated ✓</p>";
+      $("#apply-goals").replaceWith(Object.assign(document.createElement("p"), { textContent: "Goals updated ✓" }));
     });
+  }
+
+  profileForm.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(profileForm);
+    const target = Number(fd.get("target"));
+    state.profile = {
+      name: fd.get("name").trim(),
+      sex: fd.get("sex"),
+      age: Number(fd.get("age")),
+      height: Number(fd.get("height")),
+      weight: r1(Number(fd.get("weight"))),
+      target: target > 0 ? r1(target) : null,
+      activity: Number(fd.get("activity")),
+      goal: Number(fd.get("goal")),
+    };
+    save(KEYS.profile, state.profile);
+    const latest = Object.keys(state.weights).sort().pop();
+    if (!latest || state.weights[latest] !== state.profile.weight) recordWeight(todayStr(), state.profile.weight);
+    renderSettings();
+    const btn = profileForm.querySelector("button[type=submit]");
+    btn.textContent = "Saved ✓";
+    setTimeout(() => (btn.textContent = "Save profile"), 1500);
   });
 
   // ---------- Backup ----------
   $("#export-btn").addEventListener("click", () => {
-    const data = { version: 1, exported: new Date().toISOString(), log: state.log, custom: state.custom, settings: state.settings, recent: state.recent };
+    const data = {
+      version: 2, exported: new Date().toISOString(),
+      log: state.log, custom: state.custom, settings: state.settings, recent: state.recent,
+      exercise: state.exercise, profile: state.profile, weights: state.weights,
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -451,6 +641,13 @@
       state.custom = data.custom;
       state.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
       state.recent = Array.isArray(data.recent) ? data.recent : [];
+      state.exercise = data.exercise || {};
+      state.profile = data.profile || null;
+      state.weights = data.weights || {};
+      for (const list of Object.values(state.log)) for (const e of list) if (e.meal === "snacks") e.meal = "misc";
+      save(KEYS.exercise, state.exercise);
+      save(KEYS.profile, state.profile);
+      save(KEYS.weights, state.weights);
       save(KEYS.log, state.log);
       save(KEYS.custom, state.custom);
       save(KEYS.settings, state.settings);

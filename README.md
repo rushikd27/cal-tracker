@@ -6,12 +6,14 @@ It's a static web app (plain HTML/CSS/JS) with no build step, no server and no a
 
 ## Features
 
-- Log foods by meal (Breakfast, Lunch, Snacks, Dinner) for any date
+- Log foods separately for Breakfast, Lunch, Dinner and Misc, for any date
 - Search and filter by category, plus a list of recently used foods
 - Fractional servings (¼, ½, 1½…) with live calorie and macro preview
 - Daily calorie ring and protein/carbs/fat progress bars
 - Custom foods for home recipes or packaged items
-- Goal calculator (Mifflin–St Jeor BMR × activity, with suggested macros)
+- Exercise log: pick an activity and duration to get an estimate based on your weight, or enter calories from your watch. Burned calories are added to that day's allowance.
+- Saved profile (age, sex, height, weight, target weight, activity, goal) showing BMI (Asian cut-offs), BMR and maintenance calories, with one-tap suggested goals
+- Weight log with change since last entry, BMI and distance to target
 - 14-day history chart and long-term averages
 - JSON export/import for backups and moving between devices
 - Mobile-friendly, with dark mode support
@@ -34,6 +36,8 @@ All built-in foods are in [`js/foods.js`](js/foods.js). Each entry is per servin
 ```js
 { name: "Idli", serving: "1 piece (40 g)", cal: 60, p: 2, c: 12, f: 0.3, cat: "Breakfast" }
 ```
+
+Exercise activities and their MET values are in [`js/exercises.js`](js/exercises.js).
 
 ## Accuracy note
 

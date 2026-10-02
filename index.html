@@ -41,6 +41,7 @@
         </div>
         <div class="summary-side">
           <div class="remaining"><span id="cal-remaining">0</span> <span class="muted" id="remaining-label">kcal left</span></div>
+          <div class="budget muted small" id="budget"></div>
           <div class="macro" data-macro="p">
             <div class="macro-head"><span>Protein</span><span><b class="val">0</b> / <span class="goal">0</span> g</span></div>
             <div class="bar"><div class="fill"></div></div>
@@ -57,6 +58,14 @@
       </div>
 
       <div id="meals"></div>
+
+      <div class="card exercise-card">
+        <div class="meal-head">
+          <h2>Exercise<span class="meal-cal" id="ex-total">0 kcal</span></h2>
+          <button class="btn primary" id="add-ex-btn">+ Add</button>
+        </div>
+        <div id="ex-list"></div>
+      </div>
     </section>
 
     <!-- HISTORY -->
@@ -64,18 +73,59 @@
       <div class="card">
         <h2>Last 14 days</h2>
         <div id="chart" class="chart"></div>
-        <p class="muted small">Dashed line is your daily goal.</p>
+        <p class="muted small">Bars show calories eaten. The dashed line is your base goal; on exercise days your allowance is higher.</p>
       </div>
       <div class="card">
         <h2>Averages (days with entries)</h2>
         <div id="averages" class="stats"></div>
+      </div>
+      <div class="card">
+        <h2>Weight log</h2>
+        <form id="weight-form" class="row weight-row">
+          <input type="number" name="weight" min="20" max="300" step="0.1" placeholder="Today's weight (kg)" required>
+          <button type="submit" class="btn primary">Log</button>
+        </form>
+        <div id="weight-list"></div>
       </div>
     </section>
 
     <!-- SETTINGS -->
     <section id="view-settings" class="view">
       <div class="card">
+        <h2>My profile</h2>
+        <form id="profile-form" class="grid-form">
+          <label>Name<input name="name" maxlength="40" placeholder="Optional"></label>
+          <label>Sex
+            <select name="sex"><option value="m">Male</option><option value="f">Female</option></select>
+          </label>
+          <label>Age<input type="number" name="age" min="10" max="100" required></label>
+          <label>Height (cm)<input type="number" name="height" min="100" max="250" step="0.1" required></label>
+          <label>Weight (kg)<input type="number" name="weight" min="20" max="300" step="0.1" required></label>
+          <label>Target weight (kg)<input type="number" name="target" min="20" max="300" step="0.1" placeholder="Optional"></label>
+          <label class="span2">Daily activity, not counting workouts you log
+            <select name="activity">
+              <option value="1.2">Sedentary (desk job, little walking)</option>
+              <option value="1.375">Lightly active (on your feet part of the day)</option>
+              <option value="1.55">Active (on your feet most of the day)</option>
+              <option value="1.725">Very active (physical labour)</option>
+            </select>
+          </label>
+          <label class="span2">Goal
+            <select name="goal">
+              <option value="-500">Lose ~0.5 kg/week</option>
+              <option value="-250">Lose ~0.25 kg/week</option>
+              <option value="0">Maintain weight</option>
+              <option value="250">Gain ~0.25 kg/week</option>
+            </select>
+          </label>
+          <button type="submit" class="btn primary">Save profile</button>
+        </form>
+        <div id="profile-result" class="tdee-result" hidden></div>
+      </div>
+
+      <div class="card">
         <h2>Daily goals</h2>
+        <p class="muted small">Set these yourself, or save your profile above and tap “Use these goals”. Calories you burn from exercise are added on top of the calorie goal each day.</p>
         <form id="goals-form" class="grid-form">
           <label>Calories (kcal)<input type="number" name="cal" min="500" max="10000" step="10" required></label>
           <label>Protein (g)<input type="number" name="p" min="0" max="500" required></label>
@@ -83,37 +133,6 @@
           <label>Fat (g)<input type="number" name="f" min="0" max="500" required></label>
           <button type="submit" class="btn primary">Save goals</button>
         </form>
-      </div>
-
-      <div class="card">
-        <h2>Goal calculator</h2>
-        <p class="muted small">Estimates your daily needs with the Mifflin–St Jeor equation.</p>
-        <form id="tdee-form" class="grid-form">
-          <label>Sex
-            <select name="sex"><option value="m">Male</option><option value="f">Female</option></select>
-          </label>
-          <label>Age<input type="number" name="age" min="10" max="100" required></label>
-          <label>Weight (kg)<input type="number" name="weight" min="20" max="300" step="0.1" required></label>
-          <label>Height (cm)<input type="number" name="height" min="100" max="250" required></label>
-          <label>Activity
-            <select name="activity">
-              <option value="1.2">Sedentary (desk job)</option>
-              <option value="1.375" selected>Light (1–3 workouts/week)</option>
-              <option value="1.55">Moderate (3–5/week)</option>
-              <option value="1.725">Very active (6–7/week)</option>
-            </select>
-          </label>
-          <label>Goal
-            <select name="goal">
-              <option value="-500">Lose ~0.5 kg/week</option>
-              <option value="-250">Lose slowly</option>
-              <option value="0" selected>Maintain</option>
-              <option value="250">Gain slowly</option>
-            </select>
-          </label>
-          <button type="submit" class="btn">Calculate</button>
-        </form>
-        <div id="tdee-result" class="tdee-result" hidden></div>
       </div>
 
       <div class="card">
@@ -172,7 +191,24 @@
     </form>
   </dialog>
 
+  <!-- ADD EXERCISE DIALOG -->
+  <dialog id="ex-dialog">
+    <div class="dialog-head">
+      <h2>Add exercise</h2>
+      <button class="icon-btn" id="ex-close" aria-label="Close">×</button>
+    </div>
+    <form id="ex-form" class="grid-form">
+      <label class="span2">Activity<select name="activity" id="ex-activity"></select></label>
+      <label class="span2" id="ex-name-wrap" hidden>Name<input name="name" maxlength="60" placeholder="e.g. Badminton"></label>
+      <label>Duration (min)<input type="number" name="mins" min="1" max="600" value="30" required></label>
+      <label>Calories burned<input type="number" name="kcal" min="1" max="5000" required></label>
+      <p class="muted small span2" id="ex-hint"></p>
+      <button type="submit" class="btn primary">Add exercise</button>
+    </form>
+  </dialog>
+
   <script src="js/foods.js"></script>
+  <script src="js/exercises.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
