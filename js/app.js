@@ -320,13 +320,7 @@
     renderResults();
   });
 
-  function normalize(s) {
-    return s.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9 ]/g, " ");
-  }
-
   function renderResults() {
-    const q = normalize(searchInput.value.trim());
-    const words = q.split(/\s+/).filter(Boolean);
     let foods = allFoods();
 
     if (state.category === "Recent") {
@@ -334,19 +328,7 @@
     } else if (state.category !== "All") {
       foods = foods.filter((f) => f.cat === state.category);
     }
-    if (words.length) {
-      foods = foods
-        .map((f) => {
-          const hay = normalize(f.name + " " + f.cat + " " + (f.place || ""));
-          if (!words.every((w) => hay.includes(w))) return null;
-          const name = normalize(f.name);
-          const score = name.trim() === q ? -1 : name.startsWith(words[0]) ? 0 : name.split(" ").some((t) => t.startsWith(words[0])) ? 1 : 2;
-          return { f, score };
-        })
-        .filter(Boolean)
-        .sort((a, b) => a.score - b.score)
-        .map((x) => x.f);
-    }
+    foods = FoodSearch.rank(foods, searchInput.value, (f) => f.name + " " + f.cat + " " + (f.place || ""));
 
     const ul = $("#results");
     if (!foods.length) {
