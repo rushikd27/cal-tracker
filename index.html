@@ -145,8 +145,9 @@
           <p class="muted small" id="strava-needs-sync">First connect <b>Sync with GitHub</b> above. The importer runs in that private repo.</p>
           <ol>
             <li><b>COROS → Strava.</b> In the COROS app, open Profile → Settings → Third-party apps (or Connected apps), choose <b>Strava</b> and connect it. New workouts will then upload to Strava automatically.</li>
-            <li><b>Create a Strava API app</b> at <a href="https://www.strava.com/settings/api" target="_blank" rel="noopener">strava.com/settings/api</a>. Any name and category are fine. Set <b>Website</b> to <code class="js-site"></code> and <b>Authorization Callback Domain</b> to <code class="js-host"></code>.</li>
-            <li><b>Authorise.</b> Copy the app's <b>Client ID</b> here, then tap the button and allow access, keeping “View data about your private activities” ticked.
+            <li><b>Create a Strava API app</b> at <a href="https://www.strava.com/settings/api" target="_blank" rel="noopener">strava.com/settings/api</a>. Any name and category are fine. Set <b>Website</b> to <code class="js-site"></code> and <b>Authorization Callback Domain</b> to <code class="js-host"></code> (tap <b>Edit</b> on that page to change it).
+              <br><span class="muted">Ignore the “Your Access Token” and “Your Refresh Token” shown on Strava's page. They only have <i>read</i> scope and can't see your workouts. Step 4 gets the right one.</span></li>
+            <li><b>Authorise.</b> Copy the <b>Client ID</b> (the number in the “Client ID” row) here, then tap the button and allow access, keeping “View data about your private activities” ticked.
               <div class="row strava-row">
                 <input id="strava-client-id" inputmode="numeric" placeholder="Client ID" autocomplete="off">
                 <button id="strava-authorize" class="btn primary" type="button">Authorize with Strava</button>
