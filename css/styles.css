@@ -25,6 +25,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   background: var(--bg);
@@ -179,7 +180,7 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 .grid-form { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
 .grid-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--muted); }
 .grid-form .span2, .grid-form button[type="submit"] { grid-column: 1 / -1; }
-#custom-form .link-btn { grid-column: 1 / -1; justify-self: start; }
+#custom-form .link-btn, #quick-form .link-btn { grid-column: 1 / -1; justify-self: start; }
 
 .tdee-result { margin-top: 1rem; padding: .75rem; background: var(--accent-soft); border-radius: 10px; }
 
@@ -206,3 +207,9 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 .weight-row { margin-bottom: .5rem; flex-wrap: nowrap; }
 .weight-row input { flex: 1; }
 .tdee-result p { margin: 0 0 .5rem; }
+
+.quick-btn { margin-bottom: .6rem; background: var(--accent-soft); color: var(--accent); border-color: var(--accent); text-align: left; }
+.grid3 { grid-template-columns: repeat(3, 1fr); margin-top: .5rem; }
+details summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+.grid-form label.check { flex-direction: row; align-items: center; gap: .5rem; color: var(--text); }
+.grid-form label.check input { width: auto; }

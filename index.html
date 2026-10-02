@@ -136,7 +136,7 @@
       </div>
 
       <div class="card">
-        <h2>My custom foods</h2>
+        <h2>My saved foods &amp; takeout items</h2>
         <div id="custom-list"></div>
       </div>
 
@@ -159,7 +159,8 @@
     </div>
 
     <div id="dlg-search-pane">
-      <input type="search" id="search" placeholder="Search: roti, dal, biryani, idli…" autocomplete="off">
+      <button id="open-quick" class="btn quick-btn wide">🍽️ Restaurant / takeout item: enter the calories they list</button>
+      <input type="search" id="search" placeholder="Search: roti, dal, pizza, latte…" autocomplete="off">
       <div id="cat-chips" class="chips"></div>
       <ul id="results" class="results"></ul>
       <button id="open-custom" class="link-btn">+ Create a custom food</button>
@@ -178,6 +179,26 @@
       <div class="sel-macros" id="sel-macros"></div>
       <button id="confirm-add" class="btn primary wide">Add</button>
     </div>
+
+    <form id="quick-form" class="grid-form" hidden>
+      <button type="button" id="quick-back" class="link-btn">‹ Back</button>
+      <p class="muted small span2">Enter the calories from the menu, app or packaging. Protein, carbs and fat are optional.</p>
+      <label class="span2">Restaurant / place<input name="place" maxlength="60" list="place-list" placeholder="e.g. Domino's, Swiggy, office canteen"></label>
+      <datalist id="place-list"></datalist>
+      <label class="span2">Item<input name="name" required maxlength="80" placeholder="e.g. Paneer Tikka Wrap"></label>
+      <label>Calories (kcal)<input name="cal" type="number" min="0" step="any" required></label>
+      <label>Quantity<input name="qty" type="number" min="0.25" step="0.25" value="1" required></label>
+      <details class="span2">
+        <summary>Protein / carbs / fat (optional)</summary>
+        <div class="grid-form grid3">
+          <label>Protein (g)<input name="p" type="number" min="0" step="any" placeholder="0"></label>
+          <label>Carbs (g)<input name="c" type="number" min="0" step="any" placeholder="0"></label>
+          <label>Fat (g)<input name="f" type="number" min="0" step="any" placeholder="0"></label>
+        </div>
+      </details>
+      <label class="check span2"><input type="checkbox" name="remember" checked> Save this item so I can pick it again</label>
+      <button type="submit" class="btn primary span2">Add item</button>
+    </form>
 
     <form id="custom-form" class="grid-form" hidden>
       <button type="button" id="custom-back" class="link-btn">‹ Back</button>

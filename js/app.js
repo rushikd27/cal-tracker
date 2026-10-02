@@ -73,8 +73,9 @@
   const $ = (sel) => document.querySelector(sel);
 
   function allFoods() {
-    return [...state.custom.map((f) => ({ ...f, cat: "Custom", custom: true })), ...FOODS];
+    return [...state.custom.map((f) => ({ ...f, cat: f.place != null ? "Restaurant" : "Custom", custom: true })), ...FOODS];
   }
+  const foodKey = (f) => f.name + "|" + (f.place || "");
   function entriesFor(date) {
     return state.log[date] || [];
   }
@@ -158,8 +159,8 @@
         ? `<ul class="entries">${list.map(({ e, i }) => `
             <li class="entry">
               <div class="entry-main">
-                <div class="entry-name">${esc(e.name)}</div>
-                <div class="entry-sub">${e.qty} × ${esc(e.serving)} · P ${r1(e.p * e.qty)} · C ${r1(e.c * e.qty)} · F ${r1(e.f * e.qty)}</div>
+                <div class="entry-name">${esc(e.name)}${e.place != null ? '<span class="tag">takeout</span>' : ""}</div>
+                <div class="entry-sub">${e.place ? esc(e.place) + " · " : ""}${e.qty} × ${esc(e.serving)}${e.p || e.c || e.f ? ` · P ${r1(e.p * e.qty)} · C ${r1(e.c * e.qty)} · F ${r1(e.f * e.qty)}` : ""}</div>
               </div>
               <span class="entry-cal">${r0(e.cal * e.qty)}</span>
               <button class="del-btn" data-del="${i}" aria-label="Remove ${esc(e.name)}">×</button>
@@ -272,6 +273,7 @@
     $("#dlg-search-pane").hidden = name !== "search";
     $("#dlg-qty-pane").hidden = name !== "qty";
     $("#custom-form").hidden = name !== "custom";
+    $("#quick-form").hidden = name !== "quick";
   }
 
   function openAdd(mealId) {
@@ -289,7 +291,8 @@
   dialog.addEventListener("click", (ev) => { if (ev.target === dialog) dialog.close(); });
 
   function renderChips() {
-    const cats = ["All", "Recent", ...(state.custom.length ? ["Custom"] : []), ...new Set(FOODS.map((f) => f.cat))];
+    const own = [...new Set(allFoods().filter((f) => f.custom).map((f) => f.cat))].sort().reverse();
+    const cats = ["All", "Recent", ...own, ...new Set(FOODS.map((f) => f.cat))];
     $("#cat-chips").innerHTML = cats
       .map((c) => `<button class="chip ${c === state.category ? "active" : ""}" data-cat="${esc(c)}">${esc(c)}</button>`)
       .join("");
@@ -303,7 +306,7 @@
   });
 
   function normalize(s) {
-    return s.toLowerCase().replace(/[^a-z0-9 ]/g, " ");
+    return s.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9 ]/g, " ");
   }
 
   function renderResults() {
@@ -312,14 +315,14 @@
     let foods = allFoods();
 
     if (state.category === "Recent") {
-      foods = state.recent.map((n) => foods.find((f) => f.name === n)).filter(Boolean);
+      foods = state.recent.map((k) => foods.find((f) => foodKey(f) === k || f.name === k)).filter(Boolean);
     } else if (state.category !== "All") {
       foods = foods.filter((f) => f.cat === state.category);
     }
     if (words.length) {
       foods = foods
         .map((f) => {
-          const hay = normalize(f.name + " " + f.cat);
+          const hay = normalize(f.name + " " + f.cat + " " + (f.place || ""));
           if (!words.every((w) => hay.includes(w))) return null;
           const name = normalize(f.name);
           const score = name.startsWith(words[0]) ? 0 : name.split(" ").some((t) => t.startsWith(words[0])) ? 1 : 2;
@@ -338,8 +341,8 @@
     ul.innerHTML = foods.slice(0, 80).map((f, i) => `
       <li tabindex="0" data-idx="${i}">
         <div>
-          <div class="r-name">${esc(f.name)}${f.custom ? '<span class="tag">custom</span>' : ""}</div>
-          <div class="r-sub">${esc(f.serving)} · P ${f.p} · C ${f.c} · F ${f.f}</div>
+          <div class="r-name">${esc(f.name)}${f.custom ? `<span class="tag">${f.place != null ? "takeout" : "custom"}</span>` : ""}</div>
+          <div class="r-sub">${f.place ? esc(f.place) + " · " : ""}${esc(f.serving)} · P ${f.p} · C ${f.c} · F ${f.f}</div>
         </div>
         <span class="r-cal">${r0(f.cal)} kcal</span>
       </li>`).join("");
@@ -393,15 +396,51 @@
       return;
     }
     const f = state.selected;
+    logFood(f, q);
+  });
+
+  function logFood(f, q) {
     const entry = { meal: state.meal, name: f.name, serving: f.serving, qty: q, cal: f.cal, p: f.p, c: f.c, f: f.f, t: Date.now() };
+    if (f.place != null) entry.place = f.place;
     (state.log[state.date] ||= []).push(entry);
     save(KEYS.log, state.log);
 
-    state.recent = [f.name, ...state.recent.filter((n) => n !== f.name)].slice(0, 30);
+    const key = foodKey(f);
+    state.recent = [key, ...state.recent.filter((k) => k !== key && k !== f.name)].slice(0, 30);
     save(KEYS.recent, state.recent);
 
     dialog.close();
     renderToday();
+  }
+
+  // Restaurant / takeout quick add
+  const quickForm = $("#quick-form");
+  $("#open-quick").addEventListener("click", () => {
+    quickForm.reset();
+    if (searchInput.value.trim()) quickForm.name.value = searchInput.value.trim();
+    const places = [...new Set(state.custom.map((f) => f.place).filter(Boolean))];
+    $("#place-list").innerHTML = places.map((pl) => `<option value="${esc(pl)}">`).join("");
+    showPane("quick");
+    (quickForm.name.value ? quickForm.cal : quickForm.place).focus();
+  });
+  $("#quick-back").addEventListener("click", () => showPane("search"));
+  quickForm.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(quickForm);
+    const food = {
+      name: fd.get("name").trim(),
+      place: fd.get("place").trim(),
+      serving: "1 item",
+      cal: Number(fd.get("cal")) || 0,
+      p: Number(fd.get("p")) || 0,
+      c: Number(fd.get("c")) || 0,
+      f: Number(fd.get("f")) || 0,
+    };
+    if (fd.get("remember")) {
+      state.custom = [food, ...state.custom.filter((x) => foodKey(x) !== foodKey(food))];
+      save(KEYS.custom, state.custom);
+    }
+    logFood(food, Number(fd.get("qty")) || 1);
   });
 
   // Custom food creation
@@ -424,7 +463,7 @@
       c: Number(fd.get("c")) || 0,
       f: Number(fd.get("f")) || 0,
     };
-    state.custom = [food, ...state.custom.filter((x) => x.name !== food.name)];
+    state.custom = [food, ...state.custom.filter((x) => foodKey(x) !== foodKey(food))];
     save(KEYS.custom, state.custom);
     selectFood({ ...food, cat: "Custom", custom: true });
   });
@@ -529,7 +568,7 @@
     list.innerHTML = state.custom.length
       ? state.custom.map((f, i) => `
           <div class="custom-item">
-            <div><b>${esc(f.name)}</b><div class="muted small">${esc(f.serving)} · ${r0(f.cal)} kcal · P ${f.p} · C ${f.c} · F ${f.f}</div></div>
+            <div><b>${esc(f.name)}</b>${f.place != null ? '<span class="tag">takeout</span>' : ""}<div class="muted small">${f.place ? esc(f.place) + " · " : ""}${esc(f.serving)} · ${r0(f.cal)} kcal · P ${f.p} · C ${f.c} · F ${f.f}</div></div>
             <button class="del-btn" data-del-custom="${i}" aria-label="Delete ${esc(f.name)}">×</button>
           </div>`).join("")
       : `<p class="muted small">None yet. Create one from the “Add” dialog.</p>`;
