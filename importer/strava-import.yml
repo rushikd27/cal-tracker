@@ -37,7 +37,7 @@ jobs:
 
       - name: Commit changes
         run: |
-          git add strava-activities.json strava-token.json 2>/dev/null || true
+          for f in strava-activities.json strava-token.json; do [ -f "$f" ] && git add "$f"; done
           if git diff --cached --quiet; then echo "Nothing to commit"; exit 0; fi
           git config user.name "strava-import[bot]"
           git config user.email "actions@users.noreply.github.com"
