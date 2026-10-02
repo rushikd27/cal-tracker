@@ -14,7 +14,10 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>Thali Tracker</h1>
+    <div class="title-row">
+      <h1>Thali Tracker</h1>
+      <button id="sync-chip" class="sync-chip" hidden></button>
+    </div>
     <nav class="tabs" role="tablist">
       <button class="tab active" data-view="today" role="tab">Today</button>
       <button class="tab" data-view="history" role="tab">History</button>
@@ -95,6 +98,40 @@
 
     <!-- SETTINGS -->
     <section id="view-settings" class="view">
+      <div class="card" id="sync-card">
+        <h2>Sync with GitHub</h2>
+        <div id="sync-connected" hidden>
+          <p>Saving to <b id="sync-where"></b></p>
+          <p class="muted small" id="sync-detail"></p>
+          <div class="row">
+            <button id="sync-now" class="btn primary">Sync now</button>
+            <button id="sync-disconnect" class="btn">Disconnect</button>
+          </div>
+        </div>
+        <form id="sync-form" class="grid-form">
+          <p class="muted small span2">Keep your data in a <b>private</b> GitHub repository so your phone and laptop stay in sync. Your token is stored only in this browser.</p>
+          <details class="span2 help">
+            <summary>How to set it up (2 minutes, one time)</summary>
+            <ol>
+              <li>Create a new <b>private</b> repository, e.g. <code>cal-tracker-data</code>: <a href="https://github.com/new" target="_blank" rel="noopener">github.com/new</a>. Leave it empty.</li>
+              <li>Create a token: <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Settings → Fine-grained tokens → Generate new token</a>.
+                <ul>
+                  <li>Expiration: your choice. When it expires, make a new one and paste it in here.</li>
+                  <li>Repository access: <b>Only select repositories</b> → pick your data repo.</li>
+                  <li>Permissions → Repository permissions → <b>Contents: Read and write</b>.</li>
+                </ul>
+              </li>
+              <li>Copy the token (starts with <code>github_pat_</code>) and paste it below. Do the same on each device.</li>
+            </ol>
+          </details>
+          <label>GitHub username<input name="owner" required autocomplete="username" autocapitalize="off" spellcheck="false"></label>
+          <label>Data repository<input name="repo" required value="cal-tracker-data" autocapitalize="off" spellcheck="false"></label>
+          <label class="span2">Access token<input name="token" type="password" required autocomplete="off" placeholder="github_pat_…" spellcheck="false"></label>
+          <p class="sync-error span2" id="sync-error" hidden></p>
+          <button type="submit" class="btn primary">Connect &amp; sync</button>
+        </form>
+      </div>
+
       <div class="card">
         <h2>My profile</h2>
         <form id="profile-form" class="grid-form">
@@ -146,7 +183,7 @@
 
       <div class="card">
         <h2>Backup</h2>
-        <p class="muted small">Your data is stored only in this browser. Export a backup to move it to another device.</p>
+        <p class="muted small">Download all your data as a file, or restore from one. (Not needed if GitHub sync is on, but handy as an extra copy.)</p>
         <div class="row">
           <button id="export-btn" class="btn">Export JSON</button>
           <label class="btn">Import JSON<input type="file" id="import-file" accept="application/json" hidden></label>
@@ -234,6 +271,7 @@
 
   <script src="js/foods.js"></script>
   <script src="js/exercises.js"></script>
+  <script src="js/sync.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -10,7 +10,10 @@
   const KEYS = {
     log: "ct.log", custom: "ct.custom", settings: "ct.settings", recent: "ct.recent",
     exercise: "ct.exercise", profile: "ct.profile", weights: "ct.weights",
+    meta: "ct.meta", sync: "ct.sync",
   };
+  const KEYED = ["log", "exercise", "weights"];
+  const SECTIONS = ["log", "exercise", "weights", "custom", "settings", "profile", "recent"];
   const DEFAULT_SETTINGS = { cal: 2000, p: 75, c: 250, f: 65 };
 
   // ---------- Storage ----------
@@ -30,6 +33,17 @@
     }
   }
 
+  // Saves a section and records when it changed (per day for dated sections),
+  // so sync can tell which device has the newer version.
+  function persist(section, date) {
+    save(KEYS[section], state[section]);
+    const now = Date.now();
+    if (KEYED.includes(section)) (state.meta[section] ||= {})[date] = now;
+    else state.meta[section] = now;
+    save(KEYS.meta, state.meta);
+    sync.schedule();
+  }
+
   const state = {
     log: load(KEYS.log, {}),
     custom: load(KEYS.custom, []),
@@ -38,6 +52,7 @@
     exercise: load(KEYS.exercise, {}),
     profile: load(KEYS.profile, null),
     weights: load(KEYS.weights, {}),
+    meta: load(KEYS.meta, {}),
     date: todayStr(),
     meal: null,
     selected: null,
@@ -199,7 +214,7 @@
     list.splice(Number(del.dataset.delEx), 1);
     if (list.length) state.exercise[state.date] = list;
     else delete state.exercise[state.date];
-    save(KEYS.exercise, state.exercise);
+    persist("exercise", state.date);
     renderToday();
   });
 
@@ -245,7 +260,7 @@
     const name = v === "other" ? exForm.name.value.trim() : EXERCISES[v].name;
     const entry = { name, mins: Number(exForm.mins.value), kcal: Number(exForm.kcal.value), t: Date.now() };
     (state.exercise[state.date] ||= []).push(entry);
-    save(KEYS.exercise, state.exercise);
+    persist("exercise", state.date);
     exDialog.close();
     renderToday();
   });
@@ -259,7 +274,7 @@
       list.splice(Number(del.dataset.del), 1);
       if (list.length) state.log[state.date] = list;
       else delete state.log[state.date];
-      save(KEYS.log, state.log);
+      persist("log", state.date);
       renderToday();
     }
   });
@@ -325,7 +340,7 @@
           const hay = normalize(f.name + " " + f.cat + " " + (f.place || ""));
           if (!words.every((w) => hay.includes(w))) return null;
           const name = normalize(f.name);
-          const score = name.startsWith(words[0]) ? 0 : name.split(" ").some((t) => t.startsWith(words[0])) ? 1 : 2;
+          const score = name.trim() === q ? -1 : name.startsWith(words[0]) ? 0 : name.split(" ").some((t) => t.startsWith(words[0])) ? 1 : 2;
           return { f, score };
         })
         .filter(Boolean)
@@ -403,11 +418,11 @@
     const entry = { meal: state.meal, name: f.name, serving: f.serving, qty: q, cal: f.cal, p: f.p, c: f.c, f: f.f, t: Date.now() };
     if (f.place != null) entry.place = f.place;
     (state.log[state.date] ||= []).push(entry);
-    save(KEYS.log, state.log);
+    persist("log", state.date);
 
     const key = foodKey(f);
     state.recent = [key, ...state.recent.filter((k) => k !== key && k !== f.name)].slice(0, 30);
-    save(KEYS.recent, state.recent);
+    persist("recent");
 
     dialog.close();
     renderToday();
@@ -438,7 +453,7 @@
     };
     if (fd.get("remember")) {
       state.custom = [food, ...state.custom.filter((x) => foodKey(x) !== foodKey(food))];
-      save(KEYS.custom, state.custom);
+      persist("custom");
     }
     logFood(food, Number(fd.get("qty")) || 1);
   });
@@ -464,7 +479,7 @@
       f: Number(fd.get("f")) || 0,
     };
     state.custom = [food, ...state.custom.filter((x) => foodKey(x) !== foodKey(food))];
-    save(KEYS.custom, state.custom);
+    persist("custom");
     selectFood({ ...food, cat: "Custom", custom: true });
   });
 
@@ -510,7 +525,7 @@
   // ---------- Weight log ----------
   function recordWeight(date, kg) {
     state.weights[date] = kg;
-    save(KEYS.weights, state.weights);
+    persist("weights", date);
   }
   function renderWeights() {
     const dates = Object.keys(state.weights).sort().reverse();
@@ -536,7 +551,7 @@
     recordWeight(todayStr(), kg);
     if (state.profile) {
       state.profile.weight = kg;
-      save(KEYS.profile, state.profile);
+      persist("profile");
     }
     ev.target.reset();
     renderWeights();
@@ -545,7 +560,7 @@
     const b = ev.target.closest("[data-del-w]");
     if (!b) return;
     delete state.weights[b.dataset.delW];
-    save(KEYS.weights, state.weights);
+    persist("weights", b.dataset.delW);
     renderWeights();
   });
 
@@ -579,7 +594,7 @@
     const f = state.custom[Number(b.dataset.delCustom)];
     if (!confirm(`Delete custom food “${f.name}”? Past log entries are kept.`)) return;
     state.custom.splice(Number(b.dataset.delCustom), 1);
-    save(KEYS.custom, state.custom);
+    persist("custom");
     renderSettings();
   });
 
@@ -587,7 +602,7 @@
     ev.preventDefault();
     const fd = new FormData(goalsForm);
     state.settings = { cal: +fd.get("cal"), p: +fd.get("p"), c: +fd.get("c"), f: +fd.get("f") };
-    save(KEYS.settings, state.settings);
+    persist("settings");
     renderToday();
     const btn = goalsForm.querySelector("button");
     btn.textContent = "Saved ✓";
@@ -625,7 +640,7 @@
       <button type="button" class="btn primary" id="apply-goals">Use these goals</button>`;
     $("#apply-goals").addEventListener("click", () => {
       state.settings = goals;
-      save(KEYS.settings, state.settings);
+      persist("settings");
       renderSettings();
       renderToday();
       $("#apply-goals").replaceWith(Object.assign(document.createElement("p"), { textContent: "Goals updated ✓" }));
@@ -646,7 +661,7 @@
       activity: Number(fd.get("activity")),
       goal: Number(fd.get("goal")),
     };
-    save(KEYS.profile, state.profile);
+    persist("profile");
     const latest = Object.keys(state.weights).sort().pop();
     if (!latest || state.weights[latest] !== state.profile.weight) recordWeight(todayStr(), state.profile.weight);
     renderSettings();
@@ -684,13 +699,11 @@
       state.profile = data.profile || null;
       state.weights = data.weights || {};
       for (const list of Object.values(state.log)) for (const e of list) if (e.meal === "snacks") e.meal = "misc";
-      save(KEYS.exercise, state.exercise);
-      save(KEYS.profile, state.profile);
-      save(KEYS.weights, state.weights);
-      save(KEYS.log, state.log);
-      save(KEYS.custom, state.custom);
-      save(KEYS.settings, state.settings);
-      save(KEYS.recent, state.recent);
+      // An imported backup counts as the newest version of everything in it.
+      for (const k of SECTIONS) {
+        if (!KEYED.includes(k)) persist(k);
+        else for (const d of new Set([...Object.keys(state[k]), ...Object.keys(state.meta[k] || {})])) persist(k, d);
+      }
       renderSettings();
       renderToday();
       alert("Backup imported.");
@@ -700,6 +713,119 @@
       ev.target.value = "";
     }
   });
+
+  // ---------- GitHub sync ----------
+  const DEFAULTS = { log: {}, exercise: {}, weights: {}, custom: [], settings: DEFAULT_SETTINGS, profile: null, recent: [] };
+
+  function getLocal() {
+    const data = {};
+    for (const k of SECTIONS) data[k] = state[k];
+    return { data, meta: state.meta };
+  }
+
+  function applyMerged(doc) {
+    for (const k of SECTIONS) {
+      let v = doc.data[k] ?? DEFAULTS[k];
+      if (k === "settings") v = { ...DEFAULT_SETTINGS, ...v };
+      state[k] = v;
+      save(KEYS[k], v);
+    }
+    state.meta = doc.meta;
+    save(KEYS.meta, state.meta);
+    refreshViews();
+  }
+
+  function refreshViews() {
+    renderToday();
+    const active = document.querySelector(".view.active")?.id;
+    if (active === "view-history") renderHistory();
+    // Don't overwrite a form the user is in the middle of editing.
+    if (active === "view-settings" && !document.activeElement?.closest("#view-settings form")) renderSettings();
+  }
+
+  const chip = $("#sync-chip");
+  let syncInfo = { status: "idle", detail: "" };
+  function onStatus(status, detail) {
+    syncInfo = { status, detail };
+    if (status === "ok") syncInfo.at = detail;
+    renderSyncStatus();
+  }
+  function renderSyncStatus() {
+    const cfg = syncCfg;
+    chip.hidden = !cfg;
+    $("#sync-connected").hidden = !cfg;
+    $("#sync-form").hidden = !!cfg;
+    if (!cfg) return;
+    $("#sync-where").textContent = `${cfg.owner}/${cfg.repo} → ${cfg.path}`;
+    const { status, detail, at } = syncInfo;
+    const time = at ? at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+    const label = { syncing: "⟳ Syncing…", ok: "☁ Synced", offline: "☁ Offline", error: "⚠ Sync error", idle: "☁ Sync" }[status];
+    chip.textContent = label;
+    chip.classList.toggle("error", status === "error");
+    chip.title = status === "error" ? detail : time ? "Last synced " + time : "";
+    $("#sync-detail").textContent =
+      status === "error" ? "Problem: " + detail :
+      status === "offline" ? "You're offline. Changes are saved on this device and will sync when you're back online." :
+      status === "syncing" ? "Syncing…" :
+      time ? "Last synced at " + time : "";
+  }
+
+  let syncCfg = load(KEYS.sync, null);
+  const sync = GitHubSync.create({ getLocal, applyMerged, onStatus });
+
+  chip.addEventListener("click", () => {
+    if (syncInfo.status === "error") document.querySelector('.tab[data-view="settings"]').click();
+    else sync.syncNow();
+  });
+  $("#sync-now").addEventListener("click", () => sync.syncNow());
+  $("#sync-disconnect").addEventListener("click", () => {
+    if (!confirm("Disconnect from GitHub on this device? Your data stays on this device and in the GitHub repository; only the token is removed.")) return;
+    syncCfg = null;
+    localStorage.removeItem(KEYS.sync);
+    sync.configure(null);
+    renderSyncStatus();
+  });
+
+  $("#sync-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const form = ev.target;
+    const fd = new FormData(form);
+    const cfg = {
+      owner: fd.get("owner").trim().replace(/^@/, ""),
+      repo: fd.get("repo").trim().replace(/^.*\//, ""),
+      token: fd.get("token").trim(),
+      path: "thali-tracker.json",
+    };
+    const err = $("#sync-error");
+    const btn = form.querySelector("button[type=submit]");
+    err.hidden = true;
+    btn.disabled = true;
+    btn.textContent = "Connecting…";
+    try {
+      await sync.checkRepo(cfg);
+      sync.configure(cfg);
+      syncCfg = cfg;
+      save(KEYS.sync, cfg);
+      form.token.value = "";
+      renderSyncStatus();
+      await sync.syncNow();
+    } catch (e) {
+      err.textContent = e.message;
+      err.hidden = false;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Connect & sync";
+    }
+  });
+
+  if (syncCfg) {
+    sync.configure(syncCfg);
+    sync.syncNow();
+  }
+  renderSyncStatus();
+  // Pick up changes made on other devices when the app comes back to the foreground.
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") sync.syncNow(); });
+  window.addEventListener("online", () => sync.syncNow());
 
   renderToday();
 })();

@@ -227,3 +227,20 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 details summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
 .grid-form label.check { flex-direction: row; align-items: center; gap: .5rem; color: var(--text); }
 .grid-form label.check input { width: auto; }
+
+/* Sync */
+.title-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.sync-chip {
+  font: inherit; font-size: .8rem; cursor: pointer;
+  background: rgba(255,255,255,.15); color: #fff;
+  border: 1px solid rgba(255,255,255,.5); border-radius: 999px; padding: .15rem .65rem;
+}
+.sync-chip.error { background: #fff; color: var(--over); border-color: #fff; }
+.sync-error { color: var(--over); margin: 0; font-size: .9rem; }
+.help { font-size: .9rem; }
+.help ol { padding-left: 1.2rem; margin: .5rem 0 0; }
+.help li { margin-bottom: .4rem; }
+.help ul { padding-left: 1.1rem; margin: .3rem 0 0; }
+.help a { color: var(--accent); }
+code { font-size: .9em; background: var(--accent-soft); padding: 0 .3rem; border-radius: 4px; }
+#sync-connected p { margin: 0 0 .5rem; }

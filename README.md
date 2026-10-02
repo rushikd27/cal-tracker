@@ -2,7 +2,7 @@
 
 A simple calorie and macro tracker with 300+ built-in foods. Most are Indian (rotis, dals, sabzis, biryanis, dosas, chaat, mithai, chai), plus everyday items like pizza, burgers, pasta, café drinks, bakery, packaged snacks and alcohol. Each food uses a familiar serving size such as "1 katori", "1 roti" or "1 plate".
 
-It's a static web app (plain HTML/CSS/JS) with no build step, no server and no account. Your data stays in your browser's `localStorage`.
+It's a static web app (plain HTML/CSS/JS) with no build step and no server. Data is saved in your browser, and you can optionally sync it to a **private** GitHub repo so your phone and laptop share the same log.
 
 ## Features
 
@@ -31,6 +31,19 @@ python3 -m http.server 8000
 ```
 
 Pages serves straight from the `main` branch root (Settings → Pages → Deploy from a branch → `main` / `/ (root)`). Pushing to `main` updates the site in about a minute. The empty `.nojekyll` file tells Pages to serve the files as-is.
+
+## Syncing between devices (optional)
+
+Settings → **Sync with GitHub** saves everything as `thali-tracker.json` in a private repo of your choice, using the GitHub API straight from the browser:
+
+1. Create an empty **private** repo, e.g. `cal-tracker-data`.
+2. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with access to **only that repo** and **Contents: Read and write**.
+3. Enter your username, the repo name and the token in the app on each device.
+
+How it works:
+- The app syncs a couple of seconds after each change, whenever it's reopened, and when you come back online. Each sync is a commit, so the repo also keeps a full history of your data.
+- Changes merge **day by day**. If two devices change *different* days while offline, both changes are kept. If both change the *same* day, the most recent edit to that day wins. Profile, goals and saved foods each merge as a whole in the same way.
+- The token is stored only in that browser's `localStorage`. It can't reach anything except the data repo, and you can revoke it at any time on GitHub. The app refuses to sync to a public repo.
 
 ## Editing the food list
 
