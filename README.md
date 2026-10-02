@@ -1,6 +1,6 @@
 # Thali Tracker
 
-A simple calorie and macro tracker with 380+ built-in foods. Most are Indian (rotis, dals, sabzis, biryanis, dosas, chaat, mithai, chai), plus everyday items like pizza, burgers, pasta, café drinks, bakery, packaged snacks, and a full drinks menu (beer, wine, spirits with mixers, and 27 cocktails). Each food uses a familiar serving size such as "1 katori", "1 roti" or "1 plate".
+A simple calorie and macro tracker with nearly 400 built-in foods. Most are Indian (rotis, dals, sabzis, biryanis, dosas, chaat, mithai, chai), plus everyday items like pizza, burgers, pasta, café drinks, bakery, packaged snacks, and a full drinks menu (beer, wine, spirits with mixers, soju, sake and 29 cocktails). Each food uses a familiar serving size such as "1 katori", "1 roti" or "1 plate".
 
 It's a static web app (plain HTML/CSS/JS) with no build step and no server. Data is saved in your browser, and you can optionally sync it to a **private** GitHub repo so your phone and laptop share the same log.
 

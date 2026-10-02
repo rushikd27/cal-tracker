@@ -34,6 +34,8 @@ const FoodSearch = (() => {
     corona: ["beer"], hoegaarden: ["beer", "wheat"], simba: ["beer"], guinness: ["stout"],
     smirnoff: ["vodka"], absolut: ["vodka"], bacardi: ["rum"], jameson: ["whisky"], glenfiddich: ["whisky"],
     glenlivet: ["whisky"], teachers: ["whisky"], mcdowells: ["whisky"], sula: ["wine"], fratelli: ["wine"], grover: ["wine"],
+    jinro: ["soju"], chamisul: ["soju"], korean: ["soju", "makgeolli", "somaek"], japanese: ["sake", "shochu"],
+    chinese: ["baijiu"], maotai: ["baijiu"], moutai: ["baijiu"], saki: ["sake"], makkoli: ["makgeolli"], somek: ["somaek"],
   };
 
   // Multi-word names: joined into one word before splitting the query, then matched via ALIASES
@@ -42,7 +44,7 @@ const FoodSearch = (() => {
     "old monk": "rum", "royal stag": "whisky", "blenders pride": "whisky", "jack daniels": "whisky",
     "johnnie walker": "whisky", "black dog": "whisky", "100 pipers": "whisky", "imperial blue": "whisky",
     "officers choice": "whisky", "magic moments": "vodka", "grey goose": "vodka", "bombay sapphire": "gin",
-    "greater than": "gin", "thums up": "thums",
+    "greater than": "gin", "thums up": "thums", "chum churum": "soju", "jinro is back": "soju",
   };
   for (const [phrase, word] of Object.entries(PHRASES)) ALIASES[phrase.replace(/ /g, "")] = [word];
 
@@ -134,7 +136,8 @@ const FoodSearch = (() => {
       // Prefer the food's own category, e.g. "egg" lists the Eggs category (in its
       // natural order, Boiled Egg first) before Egg Biryani.
       else if (qAlts.some((alts) => alts.some(({ w }) => cat.some((c) => c === w || c === w + "s")))) score -= 2;
-      else if (qAlts[0].some(({ w }) => name[0]?.startsWith(w))) score -= 1;
+      else if (qAlts[0].some(({ w }) => name[0] === w)) score -= 1;
+      else if (qAlts[0].some(({ w }) => name[0]?.startsWith(w))) score -= 0.5;
       results.push({ f, score, i, fuzzy });
     });
     // Show close-spelling matches only when nothing matches properly ("shot" shouldn't list Hot Dog).
