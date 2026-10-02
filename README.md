@@ -21,14 +21,16 @@ It's a static web app (plain HTML/CSS/JS) with no build step, no server and no a
 
 ## Running it
 
-Open `index.html` in a browser. To serve it locally instead:
+**Live site (GitHub Pages):** https://rushikd27.github.io/cal-tracker/
+
+To run it locally, open `index.html` in a browser, or serve the folder:
 
 ```sh
 python3 -m http.server 8000
 # then visit http://localhost:8000
 ```
 
-To use it on your phone, host the folder anywhere static (GitHub Pages, Netlify, Cloudflare Pages, Vercel). Note that GitHub Pages on a **private** repo requires a paid GitHub plan.
+Pages serves straight from the `main` branch root (Settings → Pages → Deploy from a branch → `main` / `/ (root)`). Pushing to `main` updates the site in about a minute. The empty `.nojekyll` file tells Pages to serve the files as-is.
 
 ## Editing the food list
 
