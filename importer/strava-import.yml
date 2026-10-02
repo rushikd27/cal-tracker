@@ -1,0 +1,47 @@
+# Copy this file into your PRIVATE data repo as .github/workflows/strava-import.yml
+# It pulls Strava workouts (incl. COROS ones synced to Strava) into strava-activities.json.
+name: Strava import
+
+on:
+  schedule:
+    - cron: "23 * * * *" # every hour
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: strava-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get importer script from the app repo
+        run: curl -fsSL https://raw.githubusercontent.com/rushikd27/cal-tracker/main/importer/strava-import.mjs -o /tmp/strava-import.mjs
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Import activities
+        env:
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+          STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
+        run: node /tmp/strava-import.mjs
+
+      - name: Commit changes
+        run: |
+          git add strava-activities.json strava-token.json 2>/dev/null || true
+          if git diff --cached --quiet; then echo "Nothing to commit"; exit 0; fi
+          git config user.name "strava-import[bot]"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "Strava import"
+          # The app may have pushed meanwhile; rebase onto it (different files, so no conflicts).
+          for i in 1 2 3; do git pull --rebase && git push && exit 0; sleep 5; done
+          exit 1

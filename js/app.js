@@ -10,10 +10,10 @@
   const KEYS = {
     log: "ct.log", custom: "ct.custom", settings: "ct.settings", recent: "ct.recent",
     exercise: "ct.exercise", profile: "ct.profile", weights: "ct.weights",
-    meta: "ct.meta", sync: "ct.sync",
+    meta: "ct.meta", sync: "ct.sync", hidden: "ct.hidden", strava: "ct.strava", stravaId: "ct.stravaClientId",
   };
   const KEYED = ["log", "exercise", "weights"];
-  const SECTIONS = ["log", "exercise", "weights", "custom", "settings", "profile", "recent"];
+  const SECTIONS = ["log", "exercise", "weights", "custom", "settings", "profile", "recent", "hidden"];
   const DEFAULT_SETTINGS = { cal: 2000, p: 75, c: 250, f: 65 };
 
   // ---------- Storage ----------
@@ -49,6 +49,8 @@
     custom: load(KEYS.custom, []),
     settings: { ...DEFAULT_SETTINGS, ...load(KEYS.settings, {}) },
     recent: load(KEYS.recent, []),
+    hidden: load(KEYS.hidden, []), // Strava activity ids the user chose not to count
+    strava: load(KEYS.strava, null), // read-only copy of strava-activities.json
     exercise: load(KEYS.exercise, {}),
     profile: load(KEYS.profile, null),
     weights: load(KEYS.weights, {}),
@@ -97,8 +99,12 @@
   function exerciseFor(date) {
     return state.exercise[date] || [];
   }
+  function stravaFor(date, includeHidden = false) {
+    return Object.values(state.strava?.activities || {})
+      .filter((a) => a.date === date && (includeHidden || !state.hidden.includes(a.id)));
+  }
   function burnedOn(date) {
-    return exerciseFor(date).reduce((s, x) => s + x.kcal, 0);
+    return [...exerciseFor(date), ...stravaFor(date)].reduce((s, x) => s + x.kcal, 0);
   }
   function totals(entries) {
     return entries.reduce(
@@ -193,9 +199,19 @@
 
     // Exercise
     const ex = exerciseFor(state.date);
+    const sv = stravaFor(state.date);
+    const hiddenCount = stravaFor(state.date, true).length - sv.length;
     $("#ex-total").textContent = r0(burned) + " kcal";
-    $("#ex-list").innerHTML = ex.length
-      ? `<ul class="entries">${ex.map((x, i) => `
+    const stravaItems = sv.map((a) => `
+          <li class="entry">
+            <div class="entry-main">
+              <div class="entry-name">${esc(a.name)}<span class="tag strava">Strava</span></div>
+              <div class="entry-sub">${esc(a.type || "")} · ${a.mins} min${a.kcal ? "" : " · no calorie data"}</div>
+            </div>
+            <span class="entry-cal burn">−${r0(a.kcal)}</span>
+            <button class="del-btn" data-hide-strava="${esc(a.id)}" aria-label="Don't count ${esc(a.name)}">×</button>
+          </li>`).join("");
+    const manualItems = ex.map((x, i) => `
           <li class="entry">
             <div class="entry-main">
               <div class="entry-name">${esc(x.name)}</div>
@@ -203,11 +219,29 @@
             </div>
             <span class="entry-cal burn">−${r0(x.kcal)}</span>
             <button class="del-btn" data-del-ex="${i}" aria-label="Remove ${esc(x.name)}">×</button>
-          </li>`).join("")}</ul>`
-      : `<div class="empty">No exercise logged. Calories you burn are added to today's allowance.</div>`;
+          </li>`).join("");
+    const hiddenNote = hiddenCount
+      ? `<p class="muted small">${hiddenCount} Strava workout${hiddenCount > 1 ? "s" : ""} not counted. <button class="link-btn" data-unhide-strava>Count again</button></p>`
+      : "";
+    $("#ex-list").innerHTML = ex.length || sv.length
+      ? `<ul class="entries">${stravaItems}${manualItems}</ul>${hiddenNote}`
+      : `<div class="empty">No exercise logged. Calories you burn are added to today's allowance.</div>${hiddenNote}`;
   }
 
   $("#ex-list").addEventListener("click", (ev) => {
+    const hide = ev.target.closest("[data-hide-strava]");
+    if (hide) {
+      if (!confirm("Don't count this Strava workout? Use this if you've already logged it yourself.")) return;
+      state.hidden = [...state.hidden, hide.dataset.hideStrava];
+      persist("hidden");
+      return renderToday();
+    }
+    if (ev.target.closest("[data-unhide-strava]")) {
+      const ids = new Set(stravaFor(state.date, true).map((a) => a.id));
+      state.hidden = state.hidden.filter((id) => !ids.has(id));
+      persist("hidden");
+      return renderToday();
+    }
     const del = ev.target.closest("[data-del-ex]");
     if (!del) return;
     const list = exerciseFor(state.date).slice();
@@ -657,7 +691,7 @@
     const data = {
       version: 2, exported: new Date().toISOString(),
       log: state.log, custom: state.custom, settings: state.settings, recent: state.recent,
-      exercise: state.exercise, profile: state.profile, weights: state.weights,
+      exercise: state.exercise, profile: state.profile, weights: state.weights, hidden: state.hidden,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
@@ -680,6 +714,7 @@
       state.exercise = data.exercise || {};
       state.profile = data.profile || null;
       state.weights = data.weights || {};
+      state.hidden = Array.isArray(data.hidden) ? data.hidden : [];
       for (const list of Object.values(state.log)) for (const e of list) if (e.meal === "snacks") e.meal = "misc";
       // An imported backup counts as the newest version of everything in it.
       for (const k of SECTIONS) {
@@ -697,7 +732,8 @@
   });
 
   // ---------- GitHub sync ----------
-  const DEFAULTS = { log: {}, exercise: {}, weights: {}, custom: [], settings: DEFAULT_SETTINGS, profile: null, recent: [] };
+  let stravaReady = false; // set once the Strava section below has initialised
+  const DEFAULTS = { log: {}, exercise: {}, weights: {}, custom: [], settings: DEFAULT_SETTINGS, profile: null, recent: [], hidden: [] };
 
   function getLocal() {
     const data = {};
@@ -734,6 +770,7 @@
   }
   function renderSyncStatus() {
     const cfg = syncCfg;
+    if (stravaReady) renderStravaCard();
     chip.hidden = !cfg;
     $("#sync-connected").hidden = !cfg;
     $("#sync-form").hidden = !!cfg;
@@ -753,7 +790,18 @@
   }
 
   let syncCfg = load(KEYS.sync, null);
-  const sync = GitHubSync.create({ getLocal, applyMerged, onStatus });
+  const sync = GitHubSync.create({
+    getLocal, applyMerged, onStatus,
+    extras: {
+      "strava-activities.json": (doc) => {
+        if (JSON.stringify(doc) === JSON.stringify(state.strava)) return;
+        state.strava = doc;
+        save(KEYS.strava, doc);
+        refreshViews();
+        renderStravaCard();
+      },
+    },
+  });
 
   chip.addEventListener("click", () => {
     if (syncInfo.status === "error") document.querySelector('.tab[data-view="settings"]').click();
@@ -809,5 +857,150 @@
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") sync.syncNow(); });
   window.addEventListener("online", () => sync.syncNow());
 
+  // ---------- Strava (COROS workouts) ----------
+  const siteUrl = location.origin + location.pathname.replace(/index\.html$/, "");
+  const stravaClientInput = $("#strava-client-id");
+  stravaClientInput.value = load(KEYS.stravaId, "");
+  let stravaWorkflowYaml = null;
+
+  function renderStravaCard() {
+    document.querySelectorAll(".js-site").forEach((el) => (el.textContent = siteUrl));
+    document.querySelectorAll(".js-host").forEach((el) => (el.textContent = location.hostname));
+    const cfg = syncCfg;
+    $("#strava-needs-sync").hidden = !!cfg;
+    const repoUrl = cfg ? `https://github.com/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}` : null;
+    const secrets = document.querySelector(".js-secrets");
+    secrets.href = repoUrl ? repoUrl + "/settings/secrets/actions" : "#strava-card";
+    const wf = document.querySelector(".js-workflow");
+    wf.href = repoUrl
+      ? `${repoUrl}/new/main?filename=${encodeURIComponent(".github/workflows/strava-import.yml")}` +
+        (stravaWorkflowYaml ? "&value=" + encodeURIComponent(stravaWorkflowYaml) : "")
+      : "#strava-card";
+
+    const acts = Object.values(state.strava?.activities || {});
+    const status = $("#strava-status");
+    $("#strava-actions").hidden = !cfg;
+    if (acts.length) {
+      const updated = state.strava.updated ? new Date(state.strava.updated).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
+      status.textContent = `✓ ${acts.length} workouts imported${updated ? ", last new data " + updated : ""}.`;
+    } else {
+      status.textContent = cfg ? "No Strava data in your data repo yet." : "Not set up.";
+    }
+    if (!acts.length && !$("#strava-setup").dataset.touched) $("#strava-setup").open = true;
+  }
+  $("#strava-setup").addEventListener("toggle", (ev) => (ev.target.dataset.touched = "1"));
+
+  // The workflow file lives next to the app, so the pre-filled link always matches the current version.
+  fetch("importer/strava-import.yml")
+    .then((r) => (r.ok ? r.text() : null))
+    .then((t) => { stravaWorkflowYaml = t; renderStravaCard(); })
+    .catch(() => {});
+
+  $("#strava-authorize").addEventListener("click", () => {
+    const id = stravaClientInput.value.trim();
+    if (!/^\d+$/.test(id)) {
+      stravaClientInput.focus();
+      return alert("Enter the numeric Client ID from strava.com/settings/api first.");
+    }
+    save(KEYS.stravaId, id);
+    const url = new URL("https://www.strava.com/oauth/authorize");
+    url.search = new URLSearchParams({
+      client_id: id, response_type: "code", redirect_uri: siteUrl,
+      approval_prompt: "force", scope: "read,activity:read_all", state: "thali-strava",
+    });
+    location.href = url;
+  });
+
+  // Back from Strava's consent page: ?state=thali-strava&code=...&scope=...
+  const params = new URLSearchParams(location.search);
+  let stravaCode = null;
+  if (params.get("state") === "thali-strava") {
+    history.replaceState(null, "", location.pathname);
+    document.querySelector('.tab[data-view="settings"]').click();
+    $("#strava-setup").open = true;
+    const hint = $("#strava-token-hint");
+    if (params.get("error")) {
+      hint.textContent = "Strava access was not granted. Try Authorize again.";
+    } else if (!/activity:read_all/.test(params.get("scope") || "")) {
+      hint.textContent = "Please authorise again and keep “View data about your private activities” ticked.";
+    } else {
+      stravaCode = params.get("code");
+      hint.textContent = "Authorised ✓. Now paste the Client Secret from the same Strava page.";
+      $("#strava-exchange").hidden = false;
+    }
+    setTimeout(() => $("#strava-step-token").scrollIntoView({ block: "center" }), 50);
+  }
+
+  $("#strava-get-token").addEventListener("click", async () => {
+    const id = stravaClientInput.value.trim();
+    const secret = $("#strava-client-secret").value.trim();
+    if (!secret) return $("#strava-client-secret").focus();
+    const btn = $("#strava-get-token");
+    btn.disabled = true;
+    try {
+      const res = await fetch("https://www.strava.com/oauth/token", {
+        method: "POST",
+        body: new URLSearchParams({ client_id: id, client_secret: secret, code: stravaCode, grant_type: "authorization_code" }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.refresh_token) throw new Error(json.message || "Strava refused the request");
+      $("#strava-refresh").value = json.refresh_token;
+      $("#strava-token-out").hidden = false;
+      $("#strava-exchange").hidden = true;
+      $("#strava-client-secret").value = "";
+      $("#strava-token-hint").textContent = "Done ✓. Copy it for the next step.";
+    } catch (e) {
+      if (e instanceof TypeError) {
+        // Network/CORS failure: fall back to a command the user can run themselves.
+        $("#strava-curl-cmd").textContent =
+          `curl -X POST https://www.strava.com/oauth/token -d client_id=${id} -d client_secret=YOUR_CLIENT_SECRET -d code=${stravaCode} -d grant_type=authorization_code`;
+        $("#strava-curl").hidden = false;
+      } else {
+        $("#strava-token-hint").textContent = "Strava said: " + e.message + ". Check the Client Secret, or authorise again (codes expire quickly).";
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.addEventListener("click", async (ev) => {
+    const b = ev.target.closest("[data-copy]");
+    if (!b) return;
+    const input = $(b.dataset.copy);
+    try {
+      await navigator.clipboard.writeText(input.value);
+    } catch {
+      input.select();
+      document.execCommand("copy");
+    }
+    b.textContent = "Copied ✓";
+    setTimeout(() => (b.textContent = "Copy"), 1500);
+  });
+
+  $("#strava-run").addEventListener("click", async () => {
+    const msg = $("#strava-run-msg");
+    const btn = $("#strava-run");
+    msg.hidden = true;
+    btn.disabled = true;
+    btn.textContent = "Starting…";
+    try {
+      await sync.runWorkflow("strava-import.yml");
+      btn.textContent = "Importing… (about a minute)";
+      // The run takes ~30–60 s; pick up its result.
+      for (const wait of [40000, 30000, 30000]) {
+        await new Promise((r) => setTimeout(r, wait));
+        await sync.syncNow();
+      }
+    } catch (e) {
+      msg.textContent = e.message;
+      msg.hidden = false;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Import now";
+    }
+  });
+
+  stravaReady = true;
+  renderStravaCard();
   renderToday();
 })();

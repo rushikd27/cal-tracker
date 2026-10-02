@@ -8,7 +8,7 @@ const GitHubSync = (() => {
   "use strict";
 
   const KEYED = ["log", "exercise", "weights"];
-  const WHOLE = ["custom", "settings", "profile", "recent"];
+  const WHOLE = ["custom", "settings", "profile", "recent", "hidden"];
   const API = "https://api.github.com";
 
   class SyncError extends Error {
@@ -99,8 +99,8 @@ const GitHubSync = (() => {
     throw new SyncError(msg, res.status);
   }
 
-  const contentsPath = (cfg) =>
-    `/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}/contents/${cfg.path.split("/").map(encodeURIComponent).join("/")}`;
+  const repoPath = (cfg) => `/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}`;
+  const contentsPath = (cfg, path = cfg.path) => `${repoPath(cfg)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`;
 
   async function checkRepo(cfg) {
     let repo;
@@ -114,10 +114,10 @@ const GitHubSync = (() => {
     if (repo.permissions && !repo.permissions.push) throw new SyncError("The token can read but not write. Give it Contents: Read and write.", 403);
   }
 
-  async function getFile(cfg) {
+  async function getFile(cfg, path) {
     let meta;
     try {
-      meta = await (await api(cfg, "GET", contentsPath(cfg))).json();
+      meta = await (await api(cfg, "GET", contentsPath(cfg, path))).json();
     } catch (e) {
       if (e.status === 404) return null;
       throw e;
@@ -127,7 +127,7 @@ const GitHubSync = (() => {
       text = fromBase64(meta.content);
     } else {
       // Files over 1 MB come back without inline content.
-      text = await (await api(cfg, "GET", contentsPath(cfg), { accept: "application/vnd.github.raw+json" })).text();
+      text = await (await api(cfg, "GET", contentsPath(cfg, path), { accept: "application/vnd.github.raw+json" })).text();
     }
     return { doc: JSON.parse(text), sha: meta.sha };
   }
@@ -142,9 +142,22 @@ const GitHubSync = (() => {
     return res.content.sha;
   }
 
+  // Starts a workflow_dispatch run (needs the token's Actions: Read and write permission).
+  async function runWorkflow(cfg, file) {
+    const repo = await (await api(cfg, "GET", repoPath(cfg))).json();
+    try {
+      await api(cfg, "POST", `${repoPath(cfg)}/actions/workflows/${encodeURIComponent(file)}/dispatches`, { body: { ref: repo.default_branch } });
+    } catch (e) {
+      if (e.status === 404) throw new SyncError(`The ${file} workflow isn't in ${cfg.owner}/${cfg.repo} yet.`, 404);
+      if (e.status === 403) throw new SyncError("Your token can't start workflows. Give it Actions: Read and write (optional).", 403);
+      throw e;
+    }
+  }
+
   // ---------- Sync loop ----------
   // getLocal(): returns {data, meta}. applyMerged(doc): stores merged data locally.
-  function create({ getLocal, applyMerged, onStatus }) {
+  // extras: { "file.json": (jsonOrNull) => void } read-only files fetched on each sync.
+  function create({ getLocal, applyMerged, onStatus, extras = {} }) {
     let cfg = null;
     let running = null;
     let again = false;
@@ -184,6 +197,14 @@ const GitHubSync = (() => {
             again = false;
             await syncOnce();
           } while (again);
+          // Read-only extras are best effort: on failure keep the last copy and try again next sync.
+          for (const [path, handle] of Object.entries(extras)) {
+            try {
+              handle((await getFile(cfg, path))?.doc ?? null);
+            } catch (e) {
+              console.warn(`Could not read ${path}:`, e.message);
+            }
+          }
           onStatus("ok", new Date());
         } catch (e) {
           onStatus(e.status === 0 && /Offline/.test(e.message) ? "offline" : "error", e.message);
@@ -198,6 +219,7 @@ const GitHubSync = (() => {
       merge,
       checkRepo,
       configure(c) { cfg = c; },
+      runWorkflow: (file) => runWorkflow(cfg, file),
       get configured() { return !!cfg; },
       syncNow,
       schedule() {

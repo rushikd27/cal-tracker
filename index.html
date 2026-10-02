@@ -132,6 +132,51 @@
         </form>
       </div>
 
+      <div class="card" id="strava-card">
+        <h2>COROS workouts (via Strava)</h2>
+        <p class="muted small">Automatically adds the calories from your COROS workouts. COROS sends each workout to Strava, and an hourly job in your private data repo copies them here.</p>
+        <p id="strava-status" class="small"></p>
+        <div class="row" id="strava-actions" hidden>
+          <button id="strava-run" class="btn primary">Import now</button>
+        </div>
+        <p class="sync-error small" id="strava-run-msg" hidden></p>
+        <details id="strava-setup" class="help">
+          <summary>Set up (one time, about 10 minutes)</summary>
+          <p class="muted small" id="strava-needs-sync">First connect <b>Sync with GitHub</b> above. The importer runs in that private repo.</p>
+          <ol>
+            <li><b>COROS → Strava.</b> In the COROS app, open Profile → Settings → Third-party apps (or Connected apps), choose <b>Strava</b> and connect it. New workouts will then upload to Strava automatically.</li>
+            <li><b>Create a Strava API app</b> at <a href="https://www.strava.com/settings/api" target="_blank" rel="noopener">strava.com/settings/api</a>. Any name and category are fine. Set <b>Website</b> to <code class="js-site"></code> and <b>Authorization Callback Domain</b> to <code class="js-host"></code>.</li>
+            <li><b>Authorise.</b> Copy the app's <b>Client ID</b> here, then tap the button and allow access, keeping “View data about your private activities” ticked.
+              <div class="row strava-row">
+                <input id="strava-client-id" inputmode="numeric" placeholder="Client ID" autocomplete="off">
+                <button id="strava-authorize" class="btn primary" type="button">Authorize with Strava</button>
+              </div>
+            </li>
+            <li id="strava-step-token"><b>Get your refresh token.</b> <span id="strava-token-hint">This step unlocks after you authorise.</span>
+              <div id="strava-exchange" hidden>
+                <div class="row strava-row">
+                  <input id="strava-client-secret" type="password" placeholder="Client Secret (from the Strava API page)" autocomplete="off">
+                  <button id="strava-get-token" class="btn primary" type="button">Get token</button>
+                </div>
+                <p class="muted small">The secret is sent straight to Strava and not saved here.</p>
+              </div>
+              <div id="strava-token-out" hidden>
+                <p class="small">Your refresh token:</p>
+                <div class="row strava-row"><input id="strava-refresh" readonly><button class="btn" type="button" data-copy="#strava-refresh">Copy</button></div>
+              </div>
+              <div id="strava-curl" hidden>
+                <p class="small">Your browser couldn't reach Strava directly. Run this on a computer within a few minutes (put in your Client Secret). The <code>refresh_token</code> in the reply is what you need:</p>
+                <pre id="strava-curl-cmd"></pre>
+              </div>
+            </li>
+            <li><b>Add three secrets</b> to your data repo at <a class="js-secrets" target="_blank" rel="noopener">Settings → Secrets → Actions</a>, using “New repository secret” for each:
+              <code>STRAVA_CLIENT_ID</code>, <code>STRAVA_CLIENT_SECRET</code>, <code>STRAVA_REFRESH_TOKEN</code>.</li>
+            <li><b>Add the importer:</b> <a class="js-workflow" target="_blank" rel="noopener">open this pre-filled file in your data repo</a> and tap “Commit changes”. (Or copy <a href="importer/strava-import.yml" target="_blank">strava-import.yml</a> to <code>.github/workflows/</code> yourself.)</li>
+            <li><b>Run it once:</b> tap <b>Import now</b> above, or in the data repo go to Actions → Strava import → Run workflow. After that it runs every hour. For the Import now button, also give your sync token <b>Actions: Read and write</b>.</li>
+          </ol>
+        </details>
+      </div>
+
       <div class="card">
         <h2>My profile</h2>
         <form id="profile-form" class="grid-form">

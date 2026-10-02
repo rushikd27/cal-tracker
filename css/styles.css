@@ -244,3 +244,9 @@ details summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
 .help a { color: var(--accent); }
 code { font-size: .9em; background: var(--accent-soft); padding: 0 .3rem; border-radius: 4px; }
 #sync-connected p { margin: 0 0 .5rem; }
+
+/* Strava */
+.strava-row { margin-top: .4rem; flex-wrap: nowrap; }
+.strava-row input { flex: 1; min-width: 0; }
+.help pre { white-space: pre-wrap; word-break: break-all; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: .5rem; font-size: .8rem; }
+.tag.strava { background: #fc4c02; color: #fff; }

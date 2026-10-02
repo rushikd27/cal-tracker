@@ -45,6 +45,22 @@ How it works:
 - Changes merge **day by day**. If two devices change *different* days while offline, both changes are kept. If both change the *same* day, the most recent edit to that day wins. Profile, goals and saved foods each merge as a whole in the same way.
 - The token is stored only in that browser's `localStorage`. It can't reach anything except the data repo, and you can revoke it at any time on GitHub. The app refuses to sync to a public repo.
 
+## COROS workouts via Strava (optional)
+
+COROS has no public API for personal use, so workouts come in through Strava:
+
+1. **COROS → Strava**: link Strava under Third-party apps in the COROS app.
+2. **Hourly importer**: [`importer/strava-import.yml`](importer/strava-import.yml) is a GitHub Action you add to your **private data repo**. Each run it refreshes the Strava token, fetches new activities and their calories, and commits `strava-activities.json`. Your Strava app ID, secret and refresh token are kept as encrypted Actions secrets. The workflow downloads [`importer/strava-import.mjs`](importer/strava-import.mjs) from this repo at run time, so improvements apply automatically.
+3. **In the app**: synced Strava workouts appear under Exercise, tagged *Strava*, and their calories are added to that day's allowance. Tap × to stop counting one (for example, if you also logged it by hand).
+
+Settings → *COROS workouts (via Strava)* walks through the setup and gets the refresh token for you.
+
+Notes:
+- Strava only receives **workouts**, not all-day step calories. Workout calories are active calories, which is right for this app, because your daily goal already covers resting burn. Adding total calories would count that twice.
+- Rides without a calorie estimate use their work in kJ, which is roughly equal to kcal burned.
+- Hourly runs use about 720 of the 2,000 free Actions minutes a month that private repos get. Change the `cron` line to run less often.
+- *Import now* in the app needs the sync token to also have **Actions: Read and write**. Otherwise use Actions → Strava import → Run workflow on GitHub.
+
 ## Editing the food list
 
 All built-in foods are in [`js/foods.js`](js/foods.js). Each entry is per serving:
